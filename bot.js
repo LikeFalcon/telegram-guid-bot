@@ -1,85 +1,79 @@
 const TelegramBot = require('node-telegram-bot-api');
 require('dotenv').config();
 
-const token = process.env.BOT_TOKEN;
+const bot = new TelegramBot(process.env.BOT_TOKEN, {polling: true});
 const adminId = parseInt(process.env.ADMIN_ID);
 
-const bot = new TelegramBot(token, {polling: true});
+const guides = new Map();
+let userLastGuide = new Map();
 
-let guides = {};
-let userLastGuide = {};
+bot.onText(/\/start/, async (msg) => {
+    const keyboard = {
+        reply_markup: {
+            keyboard: [['📚 Посмотреть гайды']],
+            resize_keyboard: true
+        }
+    };
+    await bot.sendMessage(msg.chat.id, 'Привет! Я бот с гайдами. Выбери действие:', keyboard);
+});
 
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const opts = {
-    reply_markup: {
-      keyboard: [
-        ['📚 Посмотреть гайды']
-      ],
-      resize_keyboard: true
+bot.onText(/\/add_guide (.+) (.+)/, async (msg, match) => {
+    if (msg.from.id !== adminId) {
+        await bot.sendMessage(msg.chat.id, 'У вас нет прав для добавления гайдов');
+        return;
     }
-  };
-  bot.sendMessage(chatId, 'Привет! Я бот с гайдами. Выбери действие:', opts);
+
+    const guideName = match[1];
+    const guideContent = match[2];
+    guides.set(guideName, guideContent);
+    await bot.sendMessage(msg.chat.id, `Гайд "${guideName}" успешно добавлен!`);
 });
 
-bot.onText(/\/add_guide (.+) (.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  
-  if (msg.from.id !== adminId) {
-    bot.sendMessage(chatId, 'У вас нет прав для добавления гайдов');
-    return;
-  }
+bot.on('message', async (msg) => {
+    if (msg.text !== '📚 Посмотреть гайды') return;
 
-  const guideName = match[1];
-  const guideContent = match[2];
-  guides[guideName] = guideContent;
-  
-  bot.sendMessage(chatId, `Гайд "${guideName}" успешно добавлен!`);
-});
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
 
-bot.on('message', (msg) => {
-  if (msg.text !== '📚 Посмотреть гайды') return;
-  
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  const now = Date.now();
-  if (userLastGuide[userId] && now - userLastGuide[userId] < 24 * 60 * 60 * 1000) {
-    const timeLeft = 24 * 60 * 60 * 1000 - (now - userLastGuide[userId]);
-    const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-    const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-    bot.sendMessage(chatId, `Вы уже получили гайд сегодня. Следующий гайд будет доступен через ${hoursLeft} часов ${minutesLeft} минут`);
-    return;
-  }
-
-  if (Object.keys(guides).length === 0) {
-    bot.sendMessage(chatId, 'Пока нет доступных гайдов');
-    return;
-  }
-
-  const opts = {
-    reply_markup: {
-      inline_keyboard: Object.keys(guides).map(name => [{
-        text: name,
-        callback_data: name
-      }])
+    const now = Date.now();
+    const lastGuideTime = userLastGuide.get(userId);
+    
+    if (lastGuideTime && now - lastGuideTime < 24 * 60 * 60 * 1000) {
+        const timeLeft = 24 * 60 * 60 * 1000 - (now - lastGuideTime);
+        const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+        const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+        await bot.sendMessage(chatId, `Вы уже получили гайд сегодня. Следующий гайд будет доступен через ${hoursLeft} часов ${minutesLeft} минут`);
+        return;
     }
-  };
-  
-  bot.sendMessage(chatId, 'Выберите гайд:', opts);
+
+    if (guides.size === 0) {
+        await bot.sendMessage(chatId, 'Пока нет доступных гайдов');
+        return;
+    }
+
+    const keyboard = {
+        reply_markup: {
+            inline_keyboard: Array.from(guides.keys()).map(name => [{
+                text: name,
+                callback_data: name.substring(0, 64)
+            }])
+        }
+    };
+
+    await bot.sendMessage(chatId, 'Выберите гайд:', keyboard);
 });
 
-bot.on('callback_query', (query) => {
-  const chatId = query.message.chat.id;
-  const userId = query.from.id;
-  const guideName = query.data;
+bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const guideName = query.data;
 
-  if (guides[guideName]) {
-    userLastGuide[userId] = Date.now();
-    bot.sendMessage(chatId, guides[guideName]);
-  }
-  
-  bot.answerCallbackQuery(query.id);
+    if (guides.has(guideName)) {
+        userLastGuide.set(userId, Date.now());
+        await bot.sendMessage(chatId, guides.get(guideName));
+    }
+    
+    await bot.answerCallbackQuery(query.id);
 });
 
 console.log('Бот запущен...');
