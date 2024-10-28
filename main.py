@@ -1,3 +1,8 @@
+
+like devil
+23:43 (0 минут назад)
+кому: мне
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from datetime import datetime, timedelta
@@ -94,7 +99,7 @@ def main():
     # Обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("add_guide", add_guide))
-application.add_handler(CommandHandler("random_tip", random_tip))
+    application.add_handler(CommandHandler("random_tip", random_tip))
     
     # Обработчик сообщений с текстом "📚 Посмотреть гайды"
     application.add_handler(MessageHandler(filters.Text("📚 Посмотреть гайды"), view_guides))
@@ -105,5 +110,5 @@ application.add_handler(CommandHandler("random_tip", random_tip))
     # Запуск бота
     application.run_polling()
 
-if name == "__main__":
+if __name__ == "__main__":
     main()
